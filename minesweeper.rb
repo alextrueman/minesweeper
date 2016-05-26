@@ -152,11 +152,11 @@ class Game
   def game
     puts "Please, enter field size and number of mines, like: '5 2'.", "Size must be less than 20, and number of mines must be smaller than size"
     dimension, mines = gets.chomp.split.map { |e| e.to_i }
-    if mines > (dimension ** 2 - 1)
+    if  mines > (dimension ** 2 - 1)
       puts "Number of mines must be smaller then field size"
       game
-    elsif dimension > 20
-      puts "Size should be less than 20"
+    elsif dimension < 0 || dimension > 20
+      puts "Size should be more then 0 and less than 20"
       game
     else
       @user = User.new
