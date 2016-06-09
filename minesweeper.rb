@@ -17,9 +17,13 @@ module Check_position
   end
 
   def around_position(x, y)
-    @board[(x-1 < 0 ? 0 : x-1)..(x+1)].map do |line|
-      line[(y-1 < 0 ? 0 : y-1)..(y+1)]
+    @board[range(x)].map do |line|
+      line[range(y)]
     end
+  end
+
+  def range(x)
+    ((x-1 < 0 ? 0 : x-1)..(x+1))
   end
 end
 
@@ -75,7 +79,7 @@ class User
   end
 
   def step(x, y, key)
-    if key == 'mu'
+    if key == 'ma'
       @user_board[x][y] = 'm'
     else
       if check_position(x, y) == 'b'
@@ -97,8 +101,8 @@ class User
   def move(x, y, check)
     @user_board[x][y] = check
     if check == 0
-      range(x).each do |el_x|
-        range(y).each do |el_y|
+      range(x).to_a.each do |el_x|
+        range(y).to_a.each do |el_y|
           if el_x <= @dimension-1 && el_y <= @dimension-1 && @user_board[el_x][el_y] == "*"
             click(el_x, el_y)
           end
@@ -108,12 +112,10 @@ class User
   end
 
   def table(table)
-    puts "   #{(0..table.size-1).to_a.join(' ')}"
-    table.each_with_index { |line, i| puts "#{i} |#{line.join('|')}|" }
-  end
-
-  def range(x)
-    ((x-1 < 0 ? 0 : x-1)..(x+1)).to_a
+    puts "     #{(0..table.size-1).to_a.map {|l| l < 10 ? l.to_s+' ' : l.to_s}.join('  ')}"
+    table.each_with_index do |line, i|
+      puts "#{i < 10 ? i.to_s+' ' : i} | #{line.join(' | ')} |"
+    end
   end
 
   def lose_game
@@ -139,7 +141,7 @@ class Game
 
   def move(range)
     x, y, key = gets.chomp.split.map { |e| e }
-    keys = %w(mo mu)
+    keys = %w(mo ma)
     if range.include?(x) && range.include?(y) && key && (keys.include? key.downcase)
       system('clear')
       @user.step(x.to_i, y.to_i, key)
@@ -162,7 +164,7 @@ class Game
       @user = User.new
       @user.start_game(dimension, mines)
       @board = @user.board
-      puts "Please make your moves with keys(mo = move or mu = murk), like: '5 2 mo'"
+      puts "Please make your moves with keys(mo = move or ma = mark), like: '5 2 mo'"
       range = (0..dimension-1).to_a.map { |e| e.to_s }
       while @user.steps > 0
         move(range)
