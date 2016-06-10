@@ -125,7 +125,7 @@ class User
     puts "New game? Y/n"
     if gets.chomp.downcase == 'y'
       system('clear')
-      Game.new
+      Launcher.restart
     else
       exit
     end
@@ -180,11 +180,23 @@ class Game
     puts "New game? Y/n"
     if gets.chomp.downcase == 'y'
       system('clear')
-      Game.new
+      Launcher.restart
     else
       exit
     end
   end
 end
 
-Game.new
+class Launcher
+  class << self
+    def start
+       @game = Game.new
+    end
+
+    def restart
+      @game = Game.new
+    end
+  end
+end
+
+Launcher.start
