@@ -1,130 +1,108 @@
-module Check_position
-  def check_position(x, y)
-    if @board[x][y] == 'b'
-      return 'b'
-    else
-      counter(x, y)
+class Board
+  attr_accessor :steps, :dimension
+
+  def initialize(dimension, number_of_mines)
+    @steps = dimension ** 2 - number_of_mines
+    @dimension = dimension
+    build_field(dimension, number_of_mines)
+  end
+
+  def build_field(dimension, number_of_mines)
+    @board = Array.new(dimension) { Array.new(dimension)  { {u: 0} }}
+    number_of_mines.times do
+      set_bomb(dimension)
     end
   end
 
-  def counter(x, y, counter = 0)
-    around_position(x, y).each do |line|
-      line.each do |position|
-        counter += 1 if position == 'b'
+  def set_bomb(dimension)
+    x, y = Array.new(2) { rand(dimension) }
+    unless bomb?(x, y)
+      @board[x][y] = {u: :b}
+      set_around(x, y)
+    else
+      set_bomb(dimension)
+    end
+  end
+
+  def set_around(x, y)
+    range(x).each do |_x|
+      range(y).each do |_y|
+        set_counter(_x, _y) unless bomb?(_x, _y)
       end
     end
-    counter
   end
 
-  def around_position(x, y)
-    @board[range(x)].map do |line|
-      line[range(y)]
-    end
+  def set_counter(x, y)
+    @board[x][y][:u] += 1
+  end
+
+  def bomb?(x, y)
+    @board[x][y] == {u: :b}
   end
 
   def range(x)
-    ((x-1 < 0 ? 0 : x-1)..(x+1))
-  end
-end
-
-
-class Board
-  include Check_position
-
-  attr_accessor :board, :user_board
-
-  def initialize(dimension, number_of_mines)
-      @board = Array.new(dimension) { Array.new(dimension) }
-      @user_board = Array.new(dimension) { Array.new(dimension, "*") }
-      @dimension = dimension
-      number_of_mines.times do
-          set_bomb(dimension)
-      end
-      set_other
+    (x-1 < 0 ? 0 : x-1)..(x+1 > @dimension-1 ? x : x+1)
   end
 
-  private
-  def set_bomb(dimension)
-      x = rand(dimension)
-      y = rand(dimension)
-      if @board[x][y] != 'b'
-        @board[x][y] = 'b'
-      else
-        set_bomb(dimension)
-      end
-  end
-
-  def set_other
-    @board.each_with_index do |line, x|
-      line.map! do |position|
-        position = check_position(x, line.index(position))
-      end
-    end
-  end
-
-
-end
-
-class User
-  attr_accessor :steps, :board
-  include Check_position
-
-  def start_game(dimension, mines)
-    board = Board.new(dimension, mines)
-    @steps = dimension ** 2 - mines
-    @board = board.board
-    @user_board = board.user_board
-    @dimension = dimension
-    table(@user_board)
-  end
-
-  def step(x, y, key)
-    if key == 'ma'
-      @user_board[x][y] = 'm'
+  def click(x,y)
+    if bomb?(x, y)
+      decision('lose')
     else
-      if check_position(x, y) == 'b'
-        lose_game
-      elsif @steps == 0
-        win_game
-      else
-        click(x, y)
-      end
+      sqare_open(x, y)
     end
-    table(@user_board)
   end
 
-  def click(x, y)
-    move(x, y, check_position(x, y))
-    @steps -= 1
+  def sqare_open(x, y)
+    if @board[x][y].has_key? :u
+      @board[x][y][:c] = @board[x][y].delete :u
+      @steps -= 1
+    end
+    if @board[x][y][:c] == 0
+      zero_open(x, y)
+    end
   end
 
-  def move(x, y, check)
-    @user_board[x][y] = check
-    if check == 0
-      range(x).to_a.each do |el_x|
-        range(y).to_a.each do |el_y|
-          if el_x <= @dimension-1 && el_y <= @dimension-1 && @user_board[el_x][el_y] == "*"
-            click(el_x, el_y)
-          end
-        end
+  def zero_open(x, y)
+    range(x).each do |_x|
+      range(y).each do |_y|
+        sqare_open(_x, _y) if @board[_x][_y].has_key?(:u) && !bomb?(_x, _y)
       end
     end
   end
 
-  def table(table)
-    puts "     #{(0..table.size-1).to_a.map {|l| l < 10 ? l.to_s+' ' : l.to_s}.join('  ')}"
-    table.each_with_index do |line, i|
-      puts "#{i < 10 ? i.to_s+' ' : i} | #{line.join(' | ')} |"
+  def gui
+    @board.each do |line|
+      line.each do |el|
+        print el.has_key?(:u) ? '*' : el[:c].to_s
+      end
+      puts
     end
   end
 
   def lose_game
     system('clear')
-    puts "Game Over"
-    table(@board)
-    puts "New game? Y/n"
+    puts 'You lose'
+    open_board
+    ask_restart
+  end
+
+  def decision(key)
+    system('clear')
+    puts "You #{key}"
+    open_board
+    ask_restart
+  end
+
+  def open_board
+    @board.map do |line|
+      line.map { |el| el[:c] = el.delete :u if el[:u] }
+    end
+    gui
+  end
+
+  def ask_restart
+    print "Do you want to start new game?(y/n)\n> "
     if gets.chomp.downcase == 'y'
-      system('clear')
       Launcher.restart
     else
       exit
@@ -133,70 +111,64 @@ class User
 end
 
 class Game
-  attr_accessor :board
-
   def initialize
-    game
+    rules = "'*' - unchecked sqare, 'numbers' - count of bombs arround sqare, 'b' - bomb"
+    print "#{rules}\nEnter size, number of mines\n> "
+    size, mines = user_input
+    input_correct?(size, mines, :numbs) ? @board = Board.new(size, mines) : restart_initialize
+    start
   end
 
-  def move(range)
-    x, y, key = gets.chomp.split.map { |e| e }
-    keys = %w(mo ma)
-    if range.include?(x) && range.include?(y) && key && (keys.include? key.downcase)
-      system('clear')
-      @user.step(x.to_i, y.to_i, key)
-    else
-      puts "wrong coordinates or key"
-      move(range)
-    end
+  def start
+    print "OK! Let's start!\nYour first step:\n"
+    step
   end
 
-  def game
-    puts "Please, enter field size and number of mines, like: '5 2'.", "Size must be less than 20, and number of mines must be smaller than size"
-    dimension, mines = gets.chomp.split.map { |e| e.to_i }
-    if  mines > (dimension ** 2 - 1)
-      puts "Number of mines must be smaller then field size"
-      game
-    elsif dimension < 0 || dimension > 20
-      puts "Size should be more then 0 and less than 20"
-      game
-    else
-      @user = User.new
-      @user.start_game(dimension, mines)
-      @board = @user.board
-      puts "Please make your moves with keys(mo = move or ma = mark), like: '5 2 mo'"
-      range = (0..dimension-1).to_a.map { |e| e.to_s }
-      while @user.steps > 0
-        move(range)
-      end
-      win_game
-    end
+  def move(x, y)
+    @board.click(x, y)
+    @board.steps.zero? ? @board.decision('win') : step
   end
 
-  def win_game
-    system('clear')
-    puts "You win"
-    @user.table(@board)
-    puts "New game? Y/n"
-    if gets.chomp.downcase == 'y'
-      system('clear')
-      Launcher.restart
+  def step
+    @board.gui
+    print "> "
+    x,y = user_input
+    input_correct?(x, y) ? move(x, y) : restart_step
+  end
+
+  def input_correct?(x, y, type = :step )
+    if type == :step
+      [x, y].all? { |coord| (0...@board.dimension).cover? coord }
     else
-      exit
-    end
+      (y <= x**2-1) && (x < 20) && (y > 0) && (x > 0)
+    end if [x,y].all?
+  end
+
+  def restart_step
+    puts "Wrong coordinates!"
+    start
+  end
+
+  def restart_initialize
+    puts "Wrong numbers!"
+    initialize
+  end
+
+  def user_input
+    gets.chomp.split(' ').map(&:to_i)
   end
 end
 
 class Launcher
   class << self
     def start
-       @game = Game.new
+      system('clear')
+      @game = Game.new
     end
 
     def restart
-      @game = Game.new
+      start
     end
   end
 end
-
 Launcher.start
