@@ -1,14 +1,16 @@
+require 'pry'
 class Board
-  attr_accessor :steps, :dimension
+  attr_accessor :dimension
 
   def initialize(dimension, number_of_mines)
     @steps = dimension ** 2 - number_of_mines
     @dimension = dimension
+    @opened = Array.new
     build_field(dimension, number_of_mines)
   end
 
   def build_field(dimension, number_of_mines)
-    @board = Array.new(dimension) { Array.new(dimension)  { {u: 0} }}
+    @board = Array.new(dimension) { Array.new(dimension, 0) }
     number_of_mines.times do
       set_bomb(dimension)
     end
@@ -16,64 +18,71 @@ class Board
 
   def set_bomb(dimension)
     x, y = Array.new(2) { rand(dimension) }
-    unless bomb?(x, y)
-      @board[x][y] = {u: :b}
-      set_around(x, y)
+    unless bomb?([x, y])
+      @board[x][y] = :b
+      increment_around(x, y)
     else
       set_bomb(dimension)
     end
   end
 
-  def set_around(x, y)
-    range(x).each do |_x|
-      range(y).each do |_y|
-        set_counter(_x, _y) unless bomb?(_x, _y)
-      end
+  def increment_around(x, y)
+    range(x, y).each do |coords|
+      incremet_counter(coords) unless bomb?(coords)
     end
   end
 
-  def set_counter(x, y)
-    @board[x][y][:u] += 1
+  def incremet_counter(coords)
+    x, y = coords
+    @board[x][y] += 1
   end
 
-  def bomb?(x, y)
-    @board[x][y] == {u: :b}
+  def bomb?(coords)
+    x, y = coords
+    @board[x][y] == :b
   end
 
-  def range(x)
-    (x-1 < 0 ? 0 : x-1)..(x+1 > @dimension-1 ? x : x+1)
+  def range(x, y)
+    [x, y].map do |coord|
+      ((coord-1 < 0 ? 0 : coord-1)..(coord+1 > @dimension-1 ? coord : coord+1)).to_a
+    end.inject(&:product)
   end
 
   def click(x,y)
-    if bomb?(x, y)
+    if bomb? [x,y]
       decision('lose')
     else
-      sqare_open(x, y)
+      square_open [x, y]
     end
   end
 
-  def sqare_open(x, y)
-    if @board[x][y].has_key? :u
-      @board[x][y][:c] = @board[x][y].delete :u
+  def square_open(coords)
+    unless @opened.include? coords
+      @opened.push coords
       @steps -= 1
     end
-    if @board[x][y][:c] == 0
+    x, y = coords
+    if @board[x][y] == 0
       zero_open(x, y)
     end
   end
 
   def zero_open(x, y)
-    range(x).each do |_x|
-      range(y).each do |_y|
-        sqare_open(_x, _y) if @board[_x][_y].has_key?(:u) && !bomb?(_x, _y)
+    range(x, y).each do |coords|
+      unless @opened.include?(coords) && !bomb?(coords)
+        square_open(coords)
       end
     end
   end
 
-  def gui
-    @board.each do |line|
-      line.each do |el|
-        print el.has_key?(:u) ? '*' : el[:c].to_s
+  def gui(type: :close)
+    @board.each_with_index do |line, x|
+      line.each_with_index do |square, y|
+        if type == :close
+          print @opened.include?([x, y]) ? square.to_s : '*'
+        else
+          print square.to_s
+        end
       end
       puts
     end
@@ -82,22 +91,15 @@ class Board
   def lose_game
     system('clear')
     puts 'You lose'
-    open_board
+    gui(type: :open)
     ask_restart
   end
 
   def decision(key)
     system('clear')
     puts "You #{key}"
-    open_board
+    gui(type: :open)
     ask_restart
-  end
-
-  def open_board
-    @board.map do |line|
-      line.map { |el| el[:c] = el.delete :u if el[:u] }
-    end
-    gui
   end
 
   def ask_restart
@@ -108,11 +110,15 @@ class Board
       exit
     end
   end
+
+  def all_fields_opened?
+    @steps.zero?
+  end
 end
 
 class Game
   def initialize
-    rules = "'*' - unchecked sqare, 'numbers' - count of bombs arround sqare, 'b' - bomb"
+    rules = "'*' - unchecked square, 'numbers' - count of bombs arround square, 'b' - bomb"
     print "#{rules}\nEnter size, number of mines\n> "
     size, mines = user_input
     input_correct?(size, mines, :numbs) ? @board = Board.new(size, mines) : restart_initialize
@@ -126,7 +132,7 @@ class Game
 
   def move(x, y)
     @board.click(x, y)
-    @board.steps.zero? ? @board.decision('win') : step
+    @board.all_fields_opened? ? @board.decision('win') : step
   end
 
   def step
